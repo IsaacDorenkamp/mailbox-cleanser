@@ -1,20 +1,4 @@
-from typing import Any
-
-
-def get_sender(message: dict[str, Any]) -> str | None:
-    header_entry = [header["value"] for header in message["payload"]["headers"] if header["name"].lower() == "to"]
-    if header_entry:
-        return header_entry[0]
-    else:
-        return None
-
-
-def get_unique_senders(threads: list[dict[str, Any]]) -> set[str]:
-    all_senders = set()
-    for thread in threads:
-        all_senders |= {get_sender(message) for message in thread["messages"]}
-    
-    return all_senders
+import typing
 
 
 def get_yes_no(question: str, default: bool = True):
@@ -31,3 +15,18 @@ def get_yes_no(question: str, default: bool = True):
         return False
     else:
         return default
+    
+
+T = typing.TypeVar("T")
+
+
+def produce_batches(iterable: typing.Iterable[T], batch_size: int) -> typing.Generator[list[T], None, None]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than or equal to one.")
+
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) == batch_size:
+            yield batch
+            batch = []

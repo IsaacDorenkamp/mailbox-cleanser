@@ -1,15 +1,8 @@
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import Resource, build
-from googleapiclient.errors import HttpError
+from googleapiclient.discovery import build
 
-import base64
-import bisect
 import functools
 import imaplib
-import math
-import re
-from typing import Any
-import warnings
 
 
 def get_user_email(credentials: Credentials) -> str:
@@ -59,20 +52,28 @@ class GmailIMAP:
         self.imap.select(source_mailbox)
 
         message_set = ",".join([str(message) for message in messages])
-        status, _ = self.imap.copy(message_set, mailbox)
-        if status != "OK":
-            raise GmailIMAP.OperationError("Move failed: could not copy messages to mailbox '%s'" % mailbox)
-        
-        status, _ = self.imap.store(message_set, "+FLAGS", "\\Deleted")
-        if status != "OK":
-            raise GmailIMAP.OperationError("Move failed: could not mark messages as deleted.")
-        
-        status, _ = self.imap.expunge()
-        if status != "OK":
-            raise GmailIMAP.OperationError("Expunge failed: could not expunge deleted messages")
+
+        try:
+            status, _ = self.imap.copy(message_set, mailbox)
+            if status != "OK":
+                raise GmailIMAP.OperationError("Move failed: could not copy messages to mailbox '%s'" % mailbox)
+            
+            status, _ = self.imap.store(message_set, "+FLAGS", "\\Deleted")
+            if status != "OK":
+                raise GmailIMAP.OperationError("Move failed: could not mark messages as deleted.")
+            
+            status, _ = self.imap.expunge()
+            if status != "OK":
+                raise GmailIMAP.OperationError("Expunge failed: could not expunge deleted messages")
+        except imaplib.IMAP4.error as err:
+            raise GmailIMAP.OperationError("Move failed: IMAP error. Message: " + str(err))
     
     def has_capability(self, capability: str) -> bool:
         return capability in self.__client.capabilities
+    
+    @property
+    def user(self) -> str:
+        return self.__user
 
     @property
     def authenticated(self):

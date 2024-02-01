@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import threading
+import time
 from typing import Any, Callable
 
 
@@ -68,9 +69,26 @@ class DeferredTask:
     def lock(self) -> threading.Lock:
         return self.__lock
     
+    def wait(self) -> Any:
+        while not self.__resolved:
+            time.sleep(0.001)
+        
+        return self.result
+    
 
 main_queue = []
+task_results = {}
 _main_queue_lock = threading.Lock()
+_task_results_lock = threading.Lock()
+
+task_id = 0
+
+
+def next_task_id():
+    global task_id
+    use_id = task_id
+    task_id += 1
+    return use_id
 
 
 def process():
@@ -91,8 +109,14 @@ def process():
         main_queue = []
 
 
-def _exec(event: threading.Event, executor, *args, **kwargs):
-    executor(*args, **kwargs)
+def _exec(task_id: int, event: threading.Event, executor, *args, **kwargs):
+    result = executor(*args, **kwargs)
+
+    global task_results
+    global _task_results_lock
+    with _task_results_lock:
+        task_results[task_id] = result
+
     event.set()
 
 def main(executor, *args, **kwargs):
@@ -103,7 +127,15 @@ def main(executor, *args, **kwargs):
 
         global main_queue
         global _main_queue_lock
+    
+        task_id = next_task_id()
+
         with _main_queue_lock:
-            main_queue.append((_exec, (event, executor) + args, kwargs))
+            main_queue.append((_exec, (task_id, event, executor) + args, kwargs))
     
         event.wait()
+        
+        global task_results
+        global _task_results_lock
+        with _task_results_lock:
+            return task_results.pop(task_id)

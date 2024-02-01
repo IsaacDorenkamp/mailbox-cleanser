@@ -1,12 +1,14 @@
 import email
+import imaplib
 import re
 
 from .imap import GmailIMAP
+import util
 
 
 def get_address_from_header(from_header: str) -> str:
     if '<' in from_header:
-        return re.match(r"^.*?<(.+?)>$", from_header, re.DOTALL).group(1)
+        return re.match(r"^.*?<(.+?)>$", from_header, re.DOTALL).group(1).strip()
     else:
         return from_header
 
@@ -50,17 +52,31 @@ class CleanserService:
     def find_emails_to_cleanse(self, senders: set[str], source_mailbox: str = 'Inbox') -> set[int]:
         self.__client.imap.select(source_mailbox)
 
-        clauses = ["OR" for _ in range(max(0, len(senders) - 1))]
+        email_ids = set()
 
-        for sender in senders:
-            clauses.append("FROM '%s'" % sender)
+        # Servers don't seem to like extremely large search queries, so we'll break down large groups of
+        # senders into smaller batches.
+        for sender_batch in util.produce_batches(senders, 25):
+            clauses = ["OR" for _ in range(max(0, len(sender_batch) - 1))]
 
-        status, response = self.__client.imap.search(None, " ".join(clauses))
+            for sender in sender_batch:
+                clauses.append("FROM \"%s\"" % sender)
 
-        if status != "OK":
-            raise CleanserService.ServiceError("Search returned non-OK status: %s" % status)
+            try:
+                status, response = self.__client.imap.search(None, *clauses)
+            except imaplib.IMAP4.error as err:
+                raise CleanserService.ServiceError("Search returned error: %s" % str(err))
 
-        return {int(uid) for uid in response[0].decode('utf-8').split(' ')}
+            if status != "OK":
+                raise CleanserService.ServiceError("Search returned non-OK status: %s" % status)
+
+            email_ids |= {int(uid) for uid in response[0].decode('utf-8').split(' ')}
+        
+        return email_ids
     
     def cleanse_emails(self, uids: set[int], source_mailbox: str = 'Inbox'):
         self.__client.move(uids, "Junk", source_mailbox=source_mailbox)
+
+    @property
+    def imap(self) -> GmailIMAP:
+        return self.__client
