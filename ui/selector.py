@@ -9,7 +9,7 @@ from ui import concurrency
 
 
 class Selector(tkinter.Frame):
-    service: CleanserService
+    __service: CleanserService
 
     __senders: Checklist
     __purge: tkinter.Button
@@ -17,13 +17,12 @@ class Selector(tkinter.Frame):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.service = kwargs.get("service")
+        self.__service = kwargs.get("service")
         self.__status = None
         self.__busy = False
         self.__setup_ui()
     
     def __setup_ui(self):
-        # self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -33,7 +32,7 @@ class Selector(tkinter.Frame):
         self.__senders.grid(column=0, row=1, sticky='nesw')
 
         self.__purge = tkinter.Button(self, text="Purge E-mails", bg="red")
-        self.__purge.configure(command=self.start_purge)
+        self.__purge.configure(command=self.start_purge, state=tkinter.DISABLED)
         self.__purge.grid(column=0, row=2, pady=7)
 
     def emit_status(self, status: str):
@@ -59,6 +58,11 @@ class Selector(tkinter.Frame):
             traceback.print_exc()
 
             self.emit_status("Aggregation query failed. It is possible that a selected address is invalid.")
+            self.__end_purge()
+            return
+        
+        if len(to_purge) == 0:
+            self.emit_status("Found no e-mails to purge!")
             self.__end_purge()
             return
 
@@ -94,6 +98,14 @@ class Selector(tkinter.Frame):
         for sender in senders:
             self.__senders.append(sender)
 
+    def clear_senders(self):
+        self.__senders.clear()
+
+    def set_enabled(self, enabled: bool):
+        state = tkinter.NORMAL if enabled else tkinter.DISABLED
+        self.__senders.set_enabled(enabled)
+        self.__purge.configure(state=state)
+
     @property
     def status(self) -> str | None:
         return self.__status
@@ -101,4 +113,12 @@ class Selector(tkinter.Frame):
     @property
     def busy(self) -> bool:
         return self.__busy
+    
+    @property
+    def service(self) -> CleanserService | None:
+        return self.__service
 
+    @service.setter
+    def service(self, service: CleanserService | None):
+        self.__service = service
+        concurrency.main(self.__purge.configure, state=tkinter.DISABLED if not service else tkinter.NORMAL)

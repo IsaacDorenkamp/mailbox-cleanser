@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import functools
 import inspect
 import threading
 import time
+import tkinter
 from typing import Any, Callable
 
 
@@ -11,7 +13,7 @@ completed = []
 
 
 def has_positional_arg(signature: inspect.Signature) -> bool:
-    viable_params = filter(lambda x: x.kind not in [inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.VAR_KEYWORD], signature.parameters)
+    viable_params = filter(lambda x: x.kind not in [inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.VAR_KEYWORD], signature.parameters.values())
     try:
         next(viable_params)
         return True
@@ -102,11 +104,13 @@ def process():
         completed = []
     
     global main_queue
+
     with _main_queue_lock:
-        for callback, args, kwargs in main_queue:
-            callback(*args, **kwargs)
-        
+        to_process = main_queue
         main_queue = []
+    
+    for callback, args, kwargs in to_process:
+        callback(*args, **kwargs)
 
 
 def _exec(task_id: int, event: threading.Event, executor, *args, **kwargs):
@@ -117,6 +121,18 @@ def _exec(task_id: int, event: threading.Event, executor, *args, **kwargs):
     with _task_results_lock:
         task_results[task_id] = result
 
+    event.set()
+
+def with_event(event: threading.Event, executor, *args, **kwargs):
+    @functools.wraps(executor)
+    def wrapped(*args, **kwargs):
+        executor(*args, **kwargs)
+        event.set()
+
+    return wrapped
+
+def event_timer(event: threading.Event, seconds: int):
+    time.sleep(seconds)
     event.set()
 
 def main(executor, *args, **kwargs):
@@ -130,8 +146,13 @@ def main(executor, *args, **kwargs):
     
         task_id = next_task_id()
 
+        if has_positional_arg(inspect.signature(executor)):
+            queue_args = (task_id, event, executor) + args
+        else:
+            queue_args = (task_id, event, executor)
+
         with _main_queue_lock:
-            main_queue.append((_exec, (task_id, event, executor) + args, kwargs))
+            main_queue.append((_exec, queue_args, kwargs))
     
         event.wait()
         
@@ -139,3 +160,18 @@ def main(executor, *args, **kwargs):
         global _task_results_lock
         with _task_results_lock:
             return task_results.pop(task_id)
+
+
+def update_app(root: tkinter.Tk):
+    process()
+    root.update()
+    root.update_idletasks()
+
+
+def wait_window(window: tkinter.Toplevel, root: tkinter.Tk, is_running: tkinter.BooleanVar | None = None):
+    try:
+        while (is_running.get() if is_running else True):
+            window.state()
+            update_app(root)
+    except tkinter.TclError:
+        pass

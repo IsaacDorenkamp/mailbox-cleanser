@@ -44,3 +44,10 @@ def getvalue(key: str, expire_at: int | None = None) -> typing.Any | None:
         warnings.warn("Cache entry for key '%s' exists, but the data is malformed. This could mean the data is not valid JSON, does not have the expected keys, or contains an invalid "
                       "'modified' value.")
         return None
+
+
+def clear_all():
+    values = os.listdir(USER_CACHE_DIR)
+    for item in map(lambda value: os.path.join(USER_CACHE_DIR, value), values):
+        if os.path.isfile(item) and item.endswith(".json"):
+            os.unlink(item)

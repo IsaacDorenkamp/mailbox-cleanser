@@ -29,10 +29,18 @@ class GmailIMAP:
     __client: imaplib.IMAP4
     __authenticated: bool
 
-    def __init__(self, user: str, token: str):
+    def __init__(self, user: str, token: str, debug: bool = False):
         self.__user = user
         self.__token = token
+
+        if debug:
+            imaplib.Debug = 4
+
         self.__client = imaplib.IMAP4_SSL("imap.gmail.com")
+
+        if debug:
+            imaplib.Debug = 0
+
         self.__authenticated = False
     
     def authenticate(self):

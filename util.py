@@ -30,3 +30,6 @@ def produce_batches(iterable: typing.Iterable[T], batch_size: int) -> typing.Gen
         if len(batch) == batch_size:
             yield batch
             batch = []
+    
+    if batch:
+        yield batch

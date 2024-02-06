@@ -1,13 +1,35 @@
+import functools
+import os
+import sys
+import time
 import tkinter
 import tkinter.messagebox
+import typing
 
-from . import concurrency
-from .selector import Selector
+from google.oauth2.credentials import Credentials
 
 from api import CleanserService, GmailIMAP
 import api.imap
+from . import concurrency
+import config
 import credentials
 import persist
+from .auth import AuthenticationOptions
+from .selector import Selector
+
+
+class MenuActions:
+    class File:
+        CACHE_CLEAR = "Clear Cached Data"
+        SIGN_IN = "Log into account..."
+        SIGN_OUT = "Log Out"
+        EXIT = "Exit"
+
+    NONTRIVIAL_ACTIONS = [
+        ("file", File.CACHE_CLEAR),
+        ("file", File.SIGN_IN),
+        ("file", File.SIGN_OUT)
+    ]
 
 
 class MainApplication(tkinter.Frame):
@@ -17,8 +39,17 @@ class MainApplication(tkinter.Frame):
     __client: GmailIMAP
     __service: CleanserService
 
-    def __init__(self, parent):
+    __menubar: tkinter.Menu
+    __menus: dict[str, tkinter.Menu]
+
+    __debug: bool
+    __running: tkinter.BooleanVar
+
+    def __init__(self, parent, debug: bool = False):
         super().__init__(parent)
+        self.__running = tkinter.BooleanVar(value=True)
+        self.__menus = {}
+        self.__debug = debug
         self.__setup_ui()
     
     def __setup_ui(self):
@@ -28,14 +59,78 @@ class MainApplication(tkinter.Frame):
         self.selector = Selector(self)
         self.selector.bind("<<Status>>", self.on_selector_status)
         self.selector.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=tkinter.YES)
-    
-    def _setup_imap_client(self):
-        gmail_credentials = credentials.get_credentials()
-        user_email = api.imap.get_user_email(gmail_credentials)
-        self.__client = GmailIMAP(user_email, gmail_credentials.token)
+
+        self.__menubar = menu_bar = tkinter.Menu(self.master)
+        file_menu = tkinter.Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label=MenuActions.File.CACHE_CLEAR, command=functools.partial(
+            self.confirm,
+            "Confirm Cache Clear",
+            "This will clear all cache data. This does not include authorization information, but does include the cached lists of senders. Proceed?",
+            self.cache_clear
+        ))
+        file_menu.add_command(label=MenuActions.File.SIGN_IN, command=self.sign_in, state=tkinter.DISABLED)
+        file_menu.add_command(label=MenuActions.File.SIGN_OUT, command=self.sign_out, state=tkinter.DISABLED)
+        file_menu.add_separator()
+        file_menu.add_command(label=MenuActions.File.EXIT, command=self.try_quit)
+
+        self.__menus["file"] = file_menu
+
+        menu_bar.add_cascade(label="File", menu=file_menu)
+        self.master.config(menu=menu_bar)
+
+    def sign_in(self):
+        auth_options = AuthenticationOptions(self.master)
+
+        self.__menubar.entryconfig("File", state=tkinter.DISABLED)
+
+        auth_options.transient(self)
+        auth_options.wait_visibility()
+        auth_options.grab_set()
+
+        concurrency.wait_window(auth_options, self.master, self.running)
+
+        client = auth_options.get_client()
+        if client:
+            self.set_client(client)
+            self.selector.set_enabled(True)
+            initialize_task = concurrency.DeferredTask(self.initialize)
+            initialize_task.then(functools.partial(concurrency.main, self.__menubar.entryconfig, "File", state=tkinter.NORMAL))
+            initialize_task.run()
+
+    def sign_out(self):
+        try:
+            os.unlink(os.path.join(config.USER_DATA_DIR, "token.json"))
+        except FileNotFoundError:
+            pass
+
+        if self.__client:
+            self.__client.logout()
+
+        self.__client = None
+        self.__service = None
+        self.selector.service = None
+
+        self.disable_actions()
+        self.__menus["file"].entryconfig(MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+        self.selector.clear_senders()
+        self.selector.set_enabled(False)
+
+    def set_client(self, client):
+        self.__client = client
         self.__service = CleanserService(self.__client)
         self.selector.service = self.__service
-        concurrency.main(self.status.configure, text="Authenticating...")
+    
+    def _setup_imap_client(self) -> bool:
+        gmail_credentials = credentials.get_saved_credentials()
+        if gmail_credentials:
+            self.set_credentials(gmail_credentials)
+            return True
+        
+        return False
+    
+    def set_credentials(self, google_credentials: Credentials):
+        user_email = api.imap.get_user_email(google_credentials)
+        self.set_client(GmailIMAP(user_email, google_credentials.token, debug=self.__debug))
     
     def on_selector_status(self, _):
         self.set_status(self.selector.status)
@@ -62,6 +157,7 @@ class MainApplication(tkinter.Frame):
         return unique_senders
     
     def populate_unique_senders(self, senders: set[str]):
+        self.selector.clear_senders()
         self.selector.populate_senders(sorted(senders, key=lambda x: x.lower()))
     
     def set_status(self, status: str):
@@ -70,56 +166,100 @@ class MainApplication(tkinter.Frame):
     def setup_imap_and_load_data(self):
         self.set_status("Connecting...")
         try:
-            self._setup_imap_client()
+            found_credentials = self._setup_imap_client()
         except FileNotFoundError:
             self.set_status("Could not set up IMAP client.")
             return
+        
+        if not found_credentials:
+            self.set_status("No credentials found. Need to sign in.")
+            concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+            concurrency.main(self.sign_in)
+            return
+        
+        self.initialize()
+        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_OUT, state=tkinter.NORMAL)
 
+    def initialize(self):
         self.set_status("Authenticating...")
         self.__client.authenticate()
         self.set_status("Fetching unique senders...")
+        self.load_and_populate_unique_senders()
+        self.set_status("Done.")
 
+        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.DISABLED)
+        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_OUT, state=tkinter.NORMAL)
+    
+    def load_and_populate_unique_senders(self):
         senders = self.load_unique_senders()
         concurrency.main(self.populate_unique_senders, senders)
-        self.set_status("Done.")
+
+    def cache_clear(self):
+        persist.clear_all()
+
+        self.disable_actions()
+        
+        self.set_status("Fetching unique senders...")
+        deferred_cache = concurrency.DeferredTask(self.load_and_populate_unique_senders)
+        deferred_cache.then(functools.partial(self.set_status, "Done."))
+        deferred_cache.then(functools.partial(concurrency.main, self.enable_actions))
+        deferred_cache.run()
+    
+    def disable_actions(self):
+        for menu_name, action_name in MenuActions.NONTRIVIAL_ACTIONS:
+            self.__menus[menu_name].entryconfigure(action_name, state=tkinter.DISABLED)
+        
+        self.selector.set_enabled(False)
+
+    def enable_actions(self):
+        for menu_name, action_name in MenuActions.NONTRIVIAL_ACTIONS:
+            self.__menus[menu_name].entryconfigure(action_name, state=tkinter.NORMAL)
+        
+        self.selector.set_enabled(True)
+    
+    def confirm(self, title: str, message: str, action: typing.Callable[[], typing.Any]):
+        response = tkinter.messagebox.askyesno(title, message)
+        if response:
+            action()
     
     @property
     def busy(self) -> bool:
         return self.selector.busy
+    
+    def try_quit(self):
+        if self.busy:
+            confirm = tkinter.messagebox.askyesno("Task in Progress", "The app is busy with a task right now! If you quit now, the task could be interrupted leading "
+                                                  "to unexpected results.")
+            if not confirm:
+                return
+        
+        self.__running.set(False)
+    
+    @property
+    def running(self) -> tkinter.BooleanVar:
+        return self.__running
 
 
 def main():
     root = tkinter.Tk()
     root.wm_title("Mailbox Cleanser")
-    root.geometry("400x350")
+    root.geometry("400x450")
 
-    app = MainApplication(root)
+    debug_mode = "--debug" in sys.argv
+
+    app = MainApplication(root, debug=debug_mode)
     app.pack(fill=tkinter.BOTH, expand=tkinter.YES)
     
     # if we don't do this, the window won't populate until it is focused.
     root.wm_withdraw()
     root.update()
     root.after(1, root.deiconify)
-    
-    global running
-    running = True
-    def end_app():
-        if app.busy:
-            confirm = tkinter.messagebox.askyesno("Task in Progress", "The app is busy with a task right now! If you quit now, the task could be interrupted leading "
-                                                  "to unexpected results.")
-            if not confirm:
-                return
-
-        global running
-        running = False
 
     deferred = concurrency.DeferredTask(app.setup_imap_and_load_data)
     deferred.run()
 
-    root.protocol("WM_DELETE_WINDOW", end_app)
-    while running:
-        concurrency.process()
-        root.update()
-        root.update_idletasks()
+    root.protocol("WM_DELETE_WINDOW", app.try_quit)
+    while app.running.get():
+        concurrency.update_app(root)
     
     root.destroy()

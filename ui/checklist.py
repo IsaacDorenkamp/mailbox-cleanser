@@ -5,7 +5,7 @@ import typing
 # Took inspiration from https://stackoverflow.com/questions/68036371/tkinter-canvas-scroll-slow-rendering
 # in order to provide comfortable scrolling behavior.
 class Checklist(tkinter.Frame):
-    _items: list[tkinter.Checkbutton]
+    _items: list[tuple[tkinter.Checkbutton, tkinter.BooleanVar]]
     __enabled: bool
 
     _scroll_window: tkinter.Text
@@ -56,6 +56,15 @@ class Checklist(tkinter.Frame):
             self._scroll_window.delete(entry_index, end_index)
         self._scroll_window.configure(state="disabled")
     
+    def clear(self):
+        for item, _ in self._items:
+            item.destroy()
+
+        self._scroll_window.configure(state=tkinter.NORMAL)
+        self._scroll_window.delete("1.0", "end")
+        self._scroll_window.configure(state=tkinter.DISABLED)
+        self._items = []
+    
     def get_checked(self) -> set[str]:
         return {button.cget("text") for button, is_checked in self._items if is_checked.get()}
     
@@ -66,6 +75,7 @@ class Checklist(tkinter.Frame):
         self.__enabled = enabled
         for check in map(lambda x: x[0], self._items):
             check.configure(state='normal' if enabled else 'disabled')
+
 
     @property
     def enabled(self) -> bool:
