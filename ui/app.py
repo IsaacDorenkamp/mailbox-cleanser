@@ -221,6 +221,8 @@ class MainApplication(tkinter.Frame):
     def cache_clear(self):
         persist.clear_all()
 
+        # TODO: store "before" states and use these instead of enabling all non-trivial
+        # actions after successfully clearing the cache.
         self.disable_actions()
         
         self.set_status("Fetching unique senders...")
