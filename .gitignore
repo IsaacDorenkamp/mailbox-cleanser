@@ -1,4 +1,6 @@
+.DS_Store
 .venv
+dmg-build
 build
 dist
 credentials.json
