@@ -1,8 +1,10 @@
 import imaplib
 import tkinter
+import tkinter.messagebox
 import typing
 
 from api.service import CleanserService
+from api.imap import GenericIMAP
 from .checklist import Checklist
 import persist
 from ui import concurrency
@@ -17,7 +19,7 @@ class Selector(tkinter.Frame):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__service = kwargs.get("service")
+        self.__service = None
         self.__status = None
         self.__busy = False
         self.__setup_ui()
@@ -31,7 +33,7 @@ class Selector(tkinter.Frame):
         self.__senders = Checklist(self, padx=5, borderwidth=1)
         self.__senders.grid(column=0, row=1, sticky='nesw')
 
-        self.__purge = tkinter.Button(self, text="Purge E-mails", bg="red")
+        self.__purge = tkinter.Button(self, text="Purge E-mails")
         self.__purge.configure(command=self.start_purge, state=tkinter.DISABLED)
         self.__purge.grid(column=0, row=2, pady=7)
 
@@ -40,8 +42,14 @@ class Selector(tkinter.Frame):
         concurrency.main(self.event_generate, "<<Status>>")
     
     def start_purge(self):
-        task = concurrency.DeferredTask(self.perform_purge)
-        task.run()
+        senders = len(self.__senders.get_checked())
+        message = "Are you sure you want to purge e-mails from %d senders?" % senders
+        if not self.__service.junk_folder:
+            message += " NOTE: No junk folder is configured - e-mails will be deleted permanently!"
+        confirmed = tkinter.messagebox.askyesno("Confirm", message)
+        if confirmed:
+            task = concurrency.DeferredTask(self.perform_purge)
+            task.run()
 
     def perform_purge(self):
         concurrency.main(self.__senders.set_enabled, False)
@@ -69,8 +77,8 @@ class Selector(tkinter.Frame):
         self.emit_status("Purging %d e-mails..." % len(to_purge))
         try:
             self.service.cleanse_emails(to_purge)
-        except imaplib.IMAP4.error:
-            self.emit_status("Could not move e-mails to the Junk folder.")
+        except (imaplib.IMAP4.error, GenericIMAP.OperationError) as err:
+            self.emit_status("Could not move e-mails to the Junk folder. Reason: %s" % str(err))
             self.__end_purge()
             return
 

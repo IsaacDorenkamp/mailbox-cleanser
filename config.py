@@ -3,6 +3,10 @@ import os
 
 SCOPES = ["openid", "https://mail.google.com/", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
 
+SETTINGS_DEFAULTS = {
+    "junk_folder": "Junk"
+}
+
 APP_NAME = "Mailbox Cleanser"
 APP_AUTHOR = "Unorthodox Software"
 

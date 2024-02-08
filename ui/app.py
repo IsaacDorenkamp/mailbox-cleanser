@@ -1,3 +1,4 @@
+import configparser
 import functools
 import os
 import sys
@@ -11,6 +12,7 @@ import config
 import persist
 from .auth import AuthenticationOptions
 from .selector import Selector
+from .settings import SettingsDialog
 
 
 class MenuActions:
@@ -18,18 +20,23 @@ class MenuActions:
         CACHE_CLEAR = "Clear Cached Data"
         SIGN_IN = "Log into account..."
         SIGN_OUT = "Log Out"
+        PREFERENCES = "Preferences"
         EXIT = "Exit"
+
 
     NONTRIVIAL_ACTIONS = [
         ("file", File.CACHE_CLEAR),
         ("file", File.SIGN_IN),
-        ("file", File.SIGN_OUT)
+        ("file", File.SIGN_OUT),
+        ("file", File.PREFERENCES)
     ]
 
 
 class MainApplication(tkinter.Frame):
     selector: Selector
     status: tkinter.Label
+
+    __settings: dict[str, str | None]
 
     __client: GenericIMAP
     __service: CleanserService
@@ -40,8 +47,9 @@ class MainApplication(tkinter.Frame):
     __debug: bool
     __running: tkinter.BooleanVar
 
-    def __init__(self, parent, debug: bool = False):
+    def __init__(self, parent, settings: dict[str, str | None], debug: bool = False):
         super().__init__(parent)
+        self.__settings = settings
         self.__running = tkinter.BooleanVar(value=True)
         self.__menus = {}
         self.__debug = debug
@@ -65,6 +73,8 @@ class MainApplication(tkinter.Frame):
         ))
         file_menu.add_command(label=MenuActions.File.SIGN_IN, command=self.sign_in, state=tkinter.DISABLED)
         file_menu.add_command(label=MenuActions.File.SIGN_OUT, command=self.sign_out, state=tkinter.DISABLED)
+        file_menu.add_separator()
+        file_menu.add_command(label=MenuActions.File.PREFERENCES, command=self.show_preferences)
         file_menu.add_separator()
         file_menu.add_command(label=MenuActions.File.EXIT, command=self.try_quit)
 
@@ -109,10 +119,33 @@ class MainApplication(tkinter.Frame):
         self.__menus["file"].entryconfig(MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
         self.selector.clear_senders()
         self.selector.set_enabled(False)
+    
+    def show_preferences(self):
+        dialog = SettingsDialog(self.__settings, self.master)
+
+        dialog.transient(self)
+        dialog.wait_visibility()
+        dialog.grab_set()
+
+        concurrency.wait_window(dialog, self.master, self.__running)
+
+        new_settings = dialog.get_new_settings()
+        if new_settings:
+            self.__service.junk_folder = new_settings["junk_folder"]
+            self.__settings = new_settings
+
+            writer = configparser.ConfigParser()
+            writer[configparser.DEFAULTSECT] = new_settings
+            
+            try:
+                with open(os.path.join(config.USER_CONFIG_DIR, "settings.ini"), "w") as fp:
+                    writer.write(fp)
+            except IOError:
+                tkinter.messagebox.showerror("Could not save preferences.")
 
     def set_client(self, client: GenericIMAP):
         self.__client = client
-        self.__service = CleanserService(self.__client)
+        self.__service = CleanserService(self.__client, junk_folder=self.__settings.get("junk_folder"))
         self.selector.service = self.__service
     
     def on_selector_status(self, _):
@@ -231,14 +264,31 @@ class MainApplication(tkinter.Frame):
         return self.__running
 
 
+def _patch_nones(settings: dict[str, str]) -> dict[str, str | None]:
+    output = {}
+    for key, value in settings.items():
+        output[key] = None if value == "" else value
+    
+    return output
+
+
 def main():
+    parser = configparser.ConfigParser()
+    successful = parser.read(os.path.join(config.USER_CONFIG_DIR, "settings.ini"))
+    if len(successful) < 0:
+        settings = config.SETTINGS_DEFAULTS.copy()
+    else:
+        settings = config.SETTINGS_DEFAULTS | dict(parser.items(configparser.DEFAULTSECT))
+    
+    settings = _patch_nones(settings)
+
     root = tkinter.Tk()
     root.wm_title("Mailbox Cleanser")
     root.geometry("400x450")
 
     debug_mode = "--debug" in sys.argv
 
-    app = MainApplication(root, debug=debug_mode)
+    app = MainApplication(root, settings, debug=debug_mode)
     
     app.pack(fill=tkinter.BOTH, expand=tkinter.YES)
     

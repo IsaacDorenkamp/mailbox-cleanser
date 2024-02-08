@@ -15,13 +15,17 @@ def get_address_from_header(from_header: str) -> str:
 
 class CleanserService:
     __client: GenericIMAP
+    
+    __junk_folder: str | None
 
     class ServiceError(RuntimeError):
-        def __init__(self, msg: str):
-            super().__init__(msg)
+        """
+        An error raised when service functions encounter errors.
+        """
 
-    def __init__(self, client: GenericIMAP):
+    def __init__(self, client: GenericIMAP, junk_folder: str | None = None):
         self.__client = client
+        self.__junk_folder = junk_folder
     
     def get_unique_senders(self) -> set[str]:
         client = self.__client
@@ -75,8 +79,23 @@ class CleanserService:
         return email_ids
     
     def cleanse_emails(self, uids: set[int], source_mailbox: str = 'Inbox'):
-        self.__client.move(uids, "Junk", source_mailbox=source_mailbox)
+        if self.__junk_folder:
+            folder_exists = self.__client.check_folder(self.__junk_folder)
+            if not folder_exists:
+                raise GenericIMAP.OperationError("Folder '%s' does not exist" % self.__junk_folder)
+            
+            self.__client.move(uids, self.__junk_folder, source_mailbox=source_mailbox)
+        else:
+            self.__client.delete_messages(uids, source_mailbox=source_mailbox)
 
     @property
     def imap(self) -> GenericIMAP:
         return self.__client
+    
+    @property
+    def junk_folder(self) -> str | None:
+        return self.__junk_folder
+    
+    @junk_folder.setter
+    def junk_folder(self, junk_folder: str):
+        self.__junk_folder = junk_folder

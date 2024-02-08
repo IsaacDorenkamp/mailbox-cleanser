@@ -8,6 +8,7 @@ from abc import ABCMeta, abstractclassmethod, abstractmethod
 import functools
 import imaplib
 import json
+import re
 import socket
 import typing
 import warnings
@@ -46,6 +47,11 @@ class AbstractRegistry(ABCMeta, Registry):
 
 
 class GenericIMAP(metaclass=AbstractRegistry):
+    # Courtesy of https://pymotw.com/3/imaplib/
+    LIST_RESPONSE_PATTERN = re.compile(
+        r'\((?P<flags>.*?)\) "(?P<delimiter>.*)" (?P<name>.*)'
+    )
+
     _abstract_ = True
 
     @abstractmethod
@@ -73,6 +79,29 @@ class GenericIMAP(metaclass=AbstractRegistry):
     @abstractmethod
     def user(self) -> str:
         raise NotImplementedError()
+    
+    def check_folder(self, folder: str) -> bool:
+        _, folder_list = self.imap.list()
+        folder_names = [
+            GenericIMAP.LIST_RESPONSE_PATTERN.match(item.decode('utf-8')).group('name')[1:-1] for item in folder_list
+        ]
+        return folder in folder_names
+    
+    def delete_messages(self, messages: set[int], source_mailbox: str = 'Inbox'):
+        self.imap.select(source_mailbox)
+
+        message_set = ",".join([str(message) for message in messages])
+
+        try:
+            status, _ = self.imap.store(message_set, "+FLAGS", "\\Deleted")
+            if status != "OK":
+                raise GenericIMAP.OperationError("Delete failed: could not mark messages as deleted.")
+            
+            status, _ = self.imap.expunge()
+            if status != "OK":
+                raise GenericIMAP.OperationError("Expunge failed: could not expunge deleted messages")
+        except imaplib.IMAP4.error as err:
+            raise GenericIMAP.OperationError("Delete failed: IMAP error. Message: " + str(err))
     
     def move(self, messages: set[int], mailbox: str, source_mailbox: str = 'Inbox'):
         self.imap.select(source_mailbox)
@@ -104,6 +133,8 @@ class GenericIMAP(metaclass=AbstractRegistry):
 
 
 class GmailIMAP(GenericIMAP):
+    GMAIL_IMAP_HOST = "imap.gmail.com"
+
     __user: str
     __credentials: Credentials
     __client: imaplib.IMAP4
@@ -117,7 +148,7 @@ class GmailIMAP(GenericIMAP):
             imaplib.Debug = 4
 
         try:
-            self.__client = imaplib.IMAP4_SSL("imap.gmail.com")
+            self.__client = imaplib.IMAP4_SSL(GmailIMAP.GMAIL_IMAP_HOST)
         except socket.gaierror:
             raise GenericIMAP.OperationError("Could not connect to host.")
 
