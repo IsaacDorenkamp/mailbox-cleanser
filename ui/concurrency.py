@@ -170,8 +170,10 @@ def update_app(root: tkinter.Tk):
 
 def wait_window(window: tkinter.Toplevel, root: tkinter.Tk, is_running: tkinter.BooleanVar | None = None):
     try:
-        while (is_running.get() if is_running else True):
+        check_running = True
+        while check_running:
             window.state()
             update_app(root)
+            check_running = is_running.get() if is_running else True
     except tkinter.TclError:
         pass

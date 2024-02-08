@@ -1,18 +1,13 @@
 import functools
 import os
 import sys
-import time
 import tkinter
 import tkinter.messagebox
 import typing
 
-from google.oauth2.credentials import Credentials
-
-from api import CleanserService, GmailIMAP
-import api.imap
+from api import CleanserService, GenericIMAP, service_factory
 from . import concurrency
 import config
-import credentials
 import persist
 from .auth import AuthenticationOptions
 from .selector import Selector
@@ -36,7 +31,7 @@ class MainApplication(tkinter.Frame):
     selector: Selector
     status: tkinter.Label
 
-    __client: GmailIMAP
+    __client: GenericIMAP
     __service: CleanserService
 
     __menubar: tkinter.Menu
@@ -79,7 +74,7 @@ class MainApplication(tkinter.Frame):
         self.master.config(menu=menu_bar)
 
     def sign_in(self):
-        auth_options = AuthenticationOptions(self.master)
+        auth_options = AuthenticationOptions(lambda window: concurrency.wait_window(window, self.master, self.running), self.master)
 
         self.__menubar.entryconfig("File", state=tkinter.DISABLED)
 
@@ -99,7 +94,7 @@ class MainApplication(tkinter.Frame):
 
     def sign_out(self):
         try:
-            os.unlink(os.path.join(config.USER_DATA_DIR, "token.json"))
+            os.unlink(os.path.join(config.USER_DATA_DIR, "service_config.json"))
         except FileNotFoundError:
             pass
 
@@ -115,22 +110,10 @@ class MainApplication(tkinter.Frame):
         self.selector.clear_senders()
         self.selector.set_enabled(False)
 
-    def set_client(self, client):
+    def set_client(self, client: GenericIMAP):
         self.__client = client
         self.__service = CleanserService(self.__client)
         self.selector.service = self.__service
-    
-    def _setup_imap_client(self) -> bool:
-        gmail_credentials = credentials.get_saved_credentials()
-        if gmail_credentials:
-            self.set_credentials(gmail_credentials)
-            return True
-        
-        return False
-    
-    def set_credentials(self, google_credentials: Credentials):
-        user_email = api.imap.get_user_email(google_credentials)
-        self.set_client(GmailIMAP(user_email, google_credentials.token, debug=self.__debug))
     
     def on_selector_status(self, _):
         self.set_status(self.selector.status)
@@ -165,17 +148,25 @@ class MainApplication(tkinter.Frame):
     
     def setup_imap_and_load_data(self):
         self.set_status("Connecting...")
+        
         try:
-            found_credentials = self._setup_imap_client()
-        except FileNotFoundError:
-            self.set_status("Could not set up IMAP client.")
+            imap_service = service_factory.create_service(debug=self.__debug)
+        except GenericIMAP.OperationError as err:
+            self.set_status("Failed to connect to IMAP server.")
+            concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+            concurrency.main(tkinter.messagebox.showerror, "Setup Error", str(err))
             return
         
-        if not found_credentials:
-            self.set_status("No credentials found. Need to sign in.")
+        if not imap_service:
+            self.set_status("Not logged in.")
             concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
             concurrency.main(self.sign_in)
             return
+        
+        # ensure persisted data is updated, such as in the case that
+        # Google credentials were refreshed during the construction
+        service_factory.save_imap_service(imap_service)
+        self.set_client(imap_service)
         
         self.initialize()
         concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_OUT, state=tkinter.NORMAL)
@@ -248,6 +239,7 @@ def main():
     debug_mode = "--debug" in sys.argv
 
     app = MainApplication(root, debug=debug_mode)
+    
     app.pack(fill=tkinter.BOTH, expand=tkinter.YES)
     
     # if we don't do this, the window won't populate until it is focused.

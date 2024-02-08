@@ -1,28 +1,34 @@
 import enum
 import functools
-import threading
 import tkinter
+import typing
 
 from PIL import Image, ImageTk
 
 from ui import concurrency
 import context
 import credentials
-from api import imap
+from api import imap, service_factory
+
+from .manual_imap import ManualIMAPDialog
 
 
 class AuthenticationType(enum.StrEnum):
     GOOGLE = "google"
+    MANUAL = "manual"
 
 
 class AuthenticationOptions(tkinter.Toplevel):
+    __wait_window: typing.Callable[[tkinter.Toplevel], None]
+
     __icons: dict[str, ImageTk.PhotoImage]
-    __client: imap.GmailIMAP  # TODO: Abstract this!
+    __client: imap.GenericIMAP
     __buttons: list[tkinter.Button]
     __alive: bool
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, wait_window, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__wait_window = wait_window
         self.__icons = {}
         self.__client = None
         self.__alive = True
@@ -42,8 +48,12 @@ class AuthenticationOptions(tkinter.Toplevel):
             command=functools.partial(self.authenticate, AuthenticationType.GOOGLE)
         ))
 
-        for button in self.__buttons:
-            button.pack(fill=tkinter.BOTH, expand=tkinter.YES, padx=10, pady=10, ipady=10, ipadx=10)
+        self.__buttons.append(tkinter.Button(
+            self, text="Manual IMAP Configuration", font=("Roboto", 16), command=functools.partial(self.authenticate, AuthenticationType.MANUAL)
+        ))
+
+        for index, button in enumerate(self.__buttons):
+            button.pack(fill=tkinter.BOTH, expand=tkinter.YES, padx=10, pady=(10, 10 if index > 0 else 0), ipady=10, ipadx=10)
 
         self.resizable(False, False)
 
@@ -54,6 +64,8 @@ class AuthenticationOptions(tkinter.Toplevel):
 
         if auth_type == AuthenticationType.GOOGLE:
             auth_task = concurrency.DeferredTask(self.__google_auth)
+        elif auth_type == AuthenticationType.MANUAL:
+            auth_task = concurrency.DeferredTask(functools.partial(concurrency.main, self.__manual_auth))
 
         if auth_task:
             auth_task.then(self.__on_authenticate)
@@ -66,6 +78,7 @@ class AuthenticationOptions(tkinter.Toplevel):
             return
 
         if success:
+            service_factory.save_imap_service(self.__client)
             concurrency.main(self.destroy)
         else:
             concurrency.main(self.set_enabled, True)
@@ -81,14 +94,24 @@ class AuthenticationOptions(tkinter.Toplevel):
             return False
 
         if google_creds:
-            username = imap.get_user_email(google_creds)
-            self.__client = imap.GmailIMAP(username, google_creds.token, debug=context.is_debug)
-            credentials.save_credentials(google_creds)
+            username = imap.GmailIMAP.get_user_email(google_creds)
+            self.__client = imap.GmailIMAP(username, google_creds, debug=context.is_debug)
             return True
         
         return False
     
-    def get_client(self) -> imap.GmailIMAP | None:
+    def __manual_auth(self) -> bool:
+        dialog = ManualIMAPDialog()
+        dialog.grab_set()
+        self.__wait_window(dialog)
+
+        if dialog.ok:
+            self.__client = imap.ManualIMAP(dialog.user, dialog.password, dialog.host)
+            return True
+        else:
+            return False
+    
+    def get_client(self) -> imap.GenericIMAP | None:
         return self.__client
     
     def __close_win(self):

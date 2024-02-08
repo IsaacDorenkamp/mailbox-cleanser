@@ -1,0 +1,1 @@
+pyinstaller --noconfirm -n "Mailbox Cleanser" __main__.py

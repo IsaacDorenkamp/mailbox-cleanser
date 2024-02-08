@@ -1,4 +1,4 @@
-from .imap import GmailIMAP
+from .imap import GenericIMAP, GmailIMAP
 from .service import CleanserService
 
-__all__ = ["GmailIMAP", "CleanserService"]
+__all__ = ["GenericIMAP", "GmailIMAP", "CleanserService"]

@@ -2,7 +2,7 @@ import email
 import imaplib
 import re
 
-from .imap import GmailIMAP
+from .imap import GenericIMAP
 import util
 
 
@@ -14,13 +14,13 @@ def get_address_from_header(from_header: str) -> str:
 
 
 class CleanserService:
-    __client: GmailIMAP
+    __client: GenericIMAP
 
     class ServiceError(RuntimeError):
         def __init__(self, msg: str):
             super().__init__(msg)
 
-    def __init__(self, client: GmailIMAP):
+    def __init__(self, client: GenericIMAP):
         self.__client = client
     
     def get_unique_senders(self) -> set[str]:
@@ -78,5 +78,5 @@ class CleanserService:
         self.__client.move(uids, "Junk", source_mailbox=source_mailbox)
 
     @property
-    def imap(self) -> GmailIMAP:
+    def imap(self) -> GenericIMAP:
         return self.__client
