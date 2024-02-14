@@ -4,7 +4,7 @@ dmg-build
 windows-build
 build
 dist
-credentials.json
+resources/credentials.json
 
 *.spec
 

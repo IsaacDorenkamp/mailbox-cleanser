@@ -1,5 +1,6 @@
 import configparser
 import functools
+import imaplib
 import os
 import sys
 import tkinter
@@ -109,7 +110,11 @@ class MainApplication(tkinter.Frame):
             pass
 
         if self.__client:
-            self.__client.logout()
+            try:
+                self.__client.logout()
+            except imaplib.IMAP4.abort:
+                # socket EOF
+                pass
 
         self.__client = None
         self.__service = None

@@ -1,14 +1,16 @@
 import enum
 import functools
 import tkinter
+import tkinter.messagebox
 import typing
+import warnings
 
 from PIL import Image, ImageTk
 
-from ui import concurrency
-import context
-import credentials
+import auth.google
 from api import imap, service_factory
+import context
+from ui import concurrency
 
 from .manual_imap import ManualIMAPDialog
 
@@ -89,8 +91,13 @@ class AuthenticationOptions(tkinter.Toplevel):
 
     def __google_auth(self) -> bool:
         try:
-            google_creds = credentials.get_credentials_flow()
-        except TimeoutError:
+            google_creds = auth.google.run_authorization_flow()
+        except auth.google.AuthorizationError as err:
+            concurrency.main(tkinter.messagebox.showerror, str(err))
+            return False
+        except Warning:
+            concurrency.main(tkinter.messagebox.showerror, "Insufficient Permissions", "You have not granted sufficient permissions for Mailbox Cleanser to work."
+                             " Please ensure you grant permissions to view, modify, and delete mail in order to allow Mailbox Cleanser to work properly.")
             return False
 
         if google_creds:

@@ -1,6 +1,10 @@
-import requests
+from google.oauth2.credentials import Credentials
+
+import json
 import time
 import webbrowser
+
+import requests
 
 import config
 
@@ -11,28 +15,37 @@ class AuthorizationError(Exception):
     """
 
 
-def run_authorization_flow(timeout: int = 75) -> dict[str, str]:
+def run_authorization_flow(timeout: int = 75) -> Credentials:
     end_time = time.time() + timeout
 
     session = requests.Session()
-    auth_setup = session.post(f"{config.AUTH_SERVICE_URL}/flows/google")
+    auth_setup = session.post(f"{config.AUTH_SERVICE_URL}/flows/google", json={
+        "scopes": config.SCOPES
+    })
 
     if auth_setup.status_code >= 400:
-        raise AuthorizationError("Could not fetch authorization setup data.")
+        try:
+            response_data = auth_setup.json()
+        except json.decoder.JSONDecodeError:
+            response_data = {}
+
+        raise AuthorizationError("Could not fetch authorization setup data. Reason: " + response_data.get("detail", "An unknown error occurred."))
 
     response_data = auth_setup.json()
-    auth_url, auth_key = response_data["url"], response_data["key"]
-
+    auth_flow, auth_url = response_data["flow"], response_data["url"]
+    
     webbrowser.open(auth_url)
 
     auth_result = None
     while time.time() <= end_time:
-        auth_check = session.get(f"{config.AUTH_SERVICE_URL}/accept/{auth_key}")
+        auth_check = session.get(f"{config.AUTH_SERVICE_URL}/flows/google/accept/{auth_flow}")
         if auth_check.status_code == 200:
             auth_result = auth_check.json()
             break
+
+        time.sleep(1.0)
     
     if not auth_result:
         raise AuthorizationError("Authorization timed out.")
     
-    return auth_result
+    return Credentials.from_authorized_user_info(auth_result)
