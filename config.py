@@ -1,7 +1,11 @@
 import appdirs
 import os
+import sys
+
+DEBUG = "--debug" in sys.argv
 
 SCOPES = ["openid", "https://mail.google.com/", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
+AUTH_SERVICE_URL = "http://localhost:5000/flows/google" if DEBUG else "https://auth-flow-provider-c1cc0d075dc3.herokuapp.com"
 
 SETTINGS_DEFAULTS = {
     "junk_folder": "Junk"
