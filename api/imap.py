@@ -200,6 +200,9 @@ class GmailIMAP(GenericIMAP):
             if expiry_raw and isinstance(expiry_raw, int):
                 utc_expiry = datetime.datetime.fromtimestamp(expiry_raw // 1000, tz=datetime.timezone.utc)
                 utc_expiry = utc_expiry.replace(tzinfo=None)
+            elif expiry_raw and isinstance(expiry_raw, str):
+                utc_expiry = datetime.datetime.fromisoformat(expiry_raw)
+                utc_expiry = utc_expiry.replace(tzinfo=None)
             else:
                 utc_expiry = None
 
