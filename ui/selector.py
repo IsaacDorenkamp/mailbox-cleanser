@@ -31,7 +31,7 @@ class Selector(ttk.Frame):
 
         ttk.Label(self, text="Senders to Purge", style="Padded.TLabel").grid(column=0, row=0, padx=5, sticky='nsw')
 
-        self.__senders = Checklist(self, padx=5, borderwidth=1)
+        self.__senders = Checklist(self, borderwidth=1)
         self.__senders.grid(column=0, row=1, sticky='nesw')
 
         self.__purge = ttk.Button(self, text="Purge E-mails")

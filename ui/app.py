@@ -58,13 +58,18 @@ class MainApplication(ttk.Frame):
         self.__setup_ui()
     
     def __setup_ui(self):
-        self.status = ttk.Label(self, text="Setting up...", anchor='w', style="Padded.TLabel")
+        container = ttk.Frame(self)
+
+        self.status = ttk.Label(container, text="Setting up...", anchor='w', style="Padded.TLabel")
         self.status.pack(side=tkinter.BOTTOM, fill=tkinter.X, padx=5)
 
-        self.selector = Selector(self)
+        self.selector = Selector(container)
         self.selector.bind("<<Status>>", self.on_selector_status)
         self.selector.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=tkinter.YES)
 
+        container.pack(fill=tkinter.BOTH, expand=tkinter.YES)
+
+        self.__item_states = {}
         self.__menubar = menu_bar = tkinter.Menu(self.master)
         file_menu = tkinter.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label=MenuActions.File.CACHE_CLEAR, command=functools.partial(
@@ -121,8 +126,8 @@ class MainApplication(ttk.Frame):
         self.__service = None
         self.selector.service = None
 
-        self.disable_actions()
         self.__menus["file"].entryconfig(MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+        self.__menus["file"].entryconfig(MenuActions.File.SIGN_OUT, state=tkinter.DISABLED)
         self.selector.clear_senders()
         self.selector.set_enabled(False)
     
@@ -227,25 +232,26 @@ class MainApplication(ttk.Frame):
     def cache_clear(self):
         persist.clear_all()
 
-        # TODO: store "before" states and use these instead of enabling all non-trivial
-        # actions after successfully clearing the cache.
-        self.disable_actions()
-        
-        self.set_status("Fetching unique senders...")
-        deferred_cache = concurrency.DeferredTask(self.load_and_populate_unique_senders)
-        deferred_cache.then(functools.partial(self.set_status, "Done."))
-        deferred_cache.then(functools.partial(concurrency.main, self.enable_actions))
-        deferred_cache.run()
+        if self.__service:
+            self.disable_actions()
+
+            self.set_status("Fetching unique senders...")
+            deferred_cache = concurrency.DeferredTask(self.load_and_populate_unique_senders)
+            deferred_cache.then(functools.partial(self.set_status, "Done."))
+            deferred_cache.then(functools.partial(concurrency.main, self.enable_actions))
+            deferred_cache.run()
     
     def disable_actions(self):
         for menu_name, action_name in MenuActions.NONTRIVIAL_ACTIONS:
+            self.__item_states[menu_name, action_name] = self.__menus[menu_name].entrycget(action_name, "state")
             self.__menus[menu_name].entryconfigure(action_name, state=tkinter.DISABLED)
         
         self.selector.set_enabled(False)
 
     def enable_actions(self):
         for menu_name, action_name in MenuActions.NONTRIVIAL_ACTIONS:
-            self.__menus[menu_name].entryconfigure(action_name, state=tkinter.NORMAL)
+            print(menu_name, action_name, self.__item_states.get((menu_name, action_name), tkinter.NORMAL))
+            self.__menus[menu_name].entryconfigure(action_name, state=self.__item_states.get((menu_name, action_name), tkinter.NORMAL))
         
         self.selector.set_enabled(True)
     

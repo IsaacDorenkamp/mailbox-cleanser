@@ -47,13 +47,15 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
     
     if not auth_result:
         raise AuthorizationError("Authorization timed out.")
+    
+    print(auth_result)
 
     utc_expiry = datetime.datetime.fromtimestamp(auth_result["expiry_date"] // 1000, tz=datetime.timezone.utc)
     utc_expiry = utc_expiry.replace(tzinfo=None)
     
     result = Credentials(
         auth_result["access_token"],
-        refresh_token=auth_result["refresh_token"],
+        refresh_token=auth_result.get("refresh_token", None),
         expiry=utc_expiry
     )
     
