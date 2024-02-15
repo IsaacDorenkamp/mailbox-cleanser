@@ -250,7 +250,6 @@ class MainApplication(ttk.Frame):
 
     def enable_actions(self):
         for menu_name, action_name in MenuActions.NONTRIVIAL_ACTIONS:
-            print(menu_name, action_name, self.__item_states.get((menu_name, action_name), tkinter.NORMAL))
             self.__menus[menu_name].entryconfigure(action_name, state=self.__item_states.get((menu_name, action_name), tkinter.NORMAL))
         
         self.selector.set_enabled(True)

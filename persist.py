@@ -39,8 +39,6 @@ def getvalue(key: str, expire_at: int | None = None) -> typing.Any | None:
     except FileNotFoundError:
         return None
     except (json.decoder.JSONDecodeError, KeyError, TypeError) as exc:
-        import traceback
-        traceback.print_exc()
         warnings.warn("Cache entry for key '%s' exists, but the data is malformed. This could mean the data is not valid JSON, does not have the expected keys, or contains an invalid "
                       "'modified' value.")
         return None
