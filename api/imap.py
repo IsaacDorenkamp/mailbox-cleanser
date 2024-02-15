@@ -196,7 +196,16 @@ class GmailIMAP(GenericIMAP):
     @classmethod
     def build(cls, json_data: typing.Any, debug: bool = False) -> GmailIMAP | None:
         try:
-            creds = Credentials(json_data["token"], refresh_token=json_data.get("refresh_token"))
+            expiry = json_data.get("expiry", None)
+            if expiry:
+                expiry = datetime.datetime.fromisoformat(expiry)
+                expiry = expiry.replace(tzinfo=None)
+
+            creds = Credentials(
+                json_data["token"],
+                refresh_token=json_data.get("refresh_token"),
+                expiry=expiry
+            )
         except ValueError as error:
             warnings.warn("Could not construct credentials object: \"%s\"" % str(error))
             return None
