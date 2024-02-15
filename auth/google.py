@@ -48,4 +48,4 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
     if not auth_result:
         raise AuthorizationError("Authorization timed out.")
     
-    return Credentials.from_authorized_user_info(auth_result)
+    return Credentials(auth_result["access_token"])
