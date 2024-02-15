@@ -1,5 +1,6 @@
 import imaplib
 import tkinter
+import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
 
@@ -10,11 +11,11 @@ import persist
 from ui import concurrency
 
 
-class Selector(tkinter.Frame):
+class Selector(ttk.Frame):
     __service: CleanserService
 
     __senders: Checklist
-    __purge: tkinter.Button
+    __purge: ttk.Button
     __busy: bool
 
     def __init__(self, *args, **kwargs):
@@ -28,12 +29,12 @@ class Selector(tkinter.Frame):
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        tkinter.Label(self, text="Senders to Purge").grid(column=0, row=0, padx=5, sticky='nsw')
+        ttk.Label(self, text="Senders to Purge", style="Padded.TLabel").grid(column=0, row=0, padx=5, sticky='nsw')
 
         self.__senders = Checklist(self, padx=5, borderwidth=1)
         self.__senders.grid(column=0, row=1, sticky='nesw')
 
-        self.__purge = tkinter.Button(self, text="Purge E-mails")
+        self.__purge = ttk.Button(self, text="Purge E-mails")
         self.__purge.configure(command=self.start_purge, state=tkinter.DISABLED)
         self.__purge.grid(column=0, row=2, pady=7)
 

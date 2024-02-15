@@ -1,6 +1,7 @@
 import enum
 import functools
 import tkinter
+import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
 import warnings
@@ -25,7 +26,7 @@ class AuthenticationOptions(tkinter.Toplevel):
 
     __icons: dict[str, ImageTk.PhotoImage]
     __client: imap.GenericIMAP
-    __buttons: list[tkinter.Button]
+    __buttons: list[ttk.Button]
     __alive: bool
 
     def __init__(self, wait_window, *args, **kwargs):
@@ -45,13 +46,14 @@ class AuthenticationOptions(tkinter.Toplevel):
 
         self.__icons["google"] = ImageTk.PhotoImage(google_icon)
         self.__buttons = []
-        self.__buttons.append(tkinter.Button(
-            self, text=" Sign in with Google", image=self.__icons["google"], compound=tkinter.LEFT, font=("Roboto", 16),
+        self.__buttons.append(ttk.Button(
+            self, text=" Sign in with Google", image=self.__icons["google"], compound=tkinter.LEFT, style="Large.TButton",
             command=functools.partial(self.authenticate, AuthenticationType.GOOGLE)
         ))
 
-        self.__buttons.append(tkinter.Button(
-            self, text="Manual IMAP Configuration", font=("Roboto", 16), command=functools.partial(self.authenticate, AuthenticationType.MANUAL)
+        self.__buttons.append(ttk.Button(
+            self, text="Manual IMAP Configuration", command=functools.partial(self.authenticate, AuthenticationType.MANUAL),
+            style="Large.TButton"
         ))
 
         for index, button in enumerate(self.__buttons):
@@ -101,6 +103,8 @@ class AuthenticationOptions(tkinter.Toplevel):
             return False
 
         if google_creds:
+            concurrency.main(self.master.attributes, "-topmost", True)
+            concurrency.main(self.master.attributes, "-topmost", False)
             username = imap.GmailIMAP.get_user_email(google_creds)
             self.__client = imap.GmailIMAP(username, google_creds, debug=context.is_debug)
             return True
@@ -128,5 +132,3 @@ class AuthenticationOptions(tkinter.Toplevel):
     @property
     def alive(self) -> bool:
         return self.__alive
-    
-

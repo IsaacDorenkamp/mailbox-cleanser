@@ -4,6 +4,7 @@ import imaplib
 import os
 import sys
 import tkinter
+import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
 
@@ -33,9 +34,9 @@ class MenuActions:
     ]
 
 
-class MainApplication(tkinter.Frame):
+class MainApplication(ttk.Frame):
     selector: Selector
-    status: tkinter.Label
+    status: ttk.Label
 
     __settings: dict[str, str | None]
 
@@ -57,7 +58,7 @@ class MainApplication(tkinter.Frame):
         self.__setup_ui()
     
     def __setup_ui(self):
-        self.status = tkinter.Label(self, text="Setting up...", anchor='w')
+        self.status = ttk.Label(self, text="Setting up...", anchor='w', style="Padded.TLabel")
         self.status.pack(side=tkinter.BOTTOM, fill=tkinter.X, padx=5)
 
         self.selector = Selector(self)
@@ -280,6 +281,9 @@ def _patch_nones(settings: dict[str, str]) -> dict[str, str | None]:
 
 
 def main():
+    import tkinter.ttk as ttk
+    import ttkthemes
+
     parser = configparser.ConfigParser()
     successful = parser.read(os.path.join(config.USER_CONFIG_DIR, "settings.ini"))
     if len(successful) < 0:
@@ -289,9 +293,14 @@ def main():
     
     settings = _patch_nones(settings)
 
-    root = tkinter.Tk()
+    root = ttkthemes.ThemedTk(theme="scidgreen")
     root.wm_title("Mailbox Cleanser")
     root.geometry("400x450")
+
+    style = ttk.Style(root)
+    style.configure("Padded.TLabel", padding=5)
+    style.configure("TButton", font=("Roboto", 10))
+    style.configure("Large.TButton", font=("Roboto", 14))
 
     debug_mode = "--debug" in sys.argv
 

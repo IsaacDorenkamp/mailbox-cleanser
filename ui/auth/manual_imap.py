@@ -1,5 +1,6 @@
 import re
 import tkinter
+import tkinter.ttk as ttk
 
 
 HOST_RE = r'^[A-Za-z0-9\-]+?(\.[A-Za-z0-9\-]+?)*$'
@@ -11,7 +12,7 @@ class ManualIMAPDialog(tkinter.Toplevel):
     __host: tkinter.StringVar
     __user: tkinter.StringVar
     __password: tkinter.StringVar
-    __ok_btn: tkinter.Button
+    __ok_btn: ttk.Button
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -20,13 +21,14 @@ class ManualIMAPDialog(tkinter.Toplevel):
         self.__setup_ui()
     
     def __setup_ui(self):
-        self.grid_columnconfigure(1, weight=1)
+        self.resizable(True, False)
         
-        self.configure(padx=5, pady=5)
+        container = ttk.Frame(self, padding=7)
+        container.grid_columnconfigure(1, weight=1)
 
-        tkinter.Label(self, text="Host:").grid(row=0, column=0, sticky="e")
-        tkinter.Label(self, text="E-mail:").grid(row=1, column=0, sticky="e")
-        tkinter.Label(self, text="Password:").grid(row=2, column=0, sticky="e")
+        ttk.Label(container, text="Host:").grid(row=0, column=0, sticky="e", padx=(0, 5))
+        ttk.Label(container, text="E-mail:").grid(row=1, column=0, sticky="e", padx=(0, 5))
+        ttk.Label(container, text="Password:").grid(row=2, column=0, sticky="e", padx=(0, 5))
 
         self.__host = tkinter.StringVar(self)
         self.__user = tkinter.StringVar(self)
@@ -39,27 +41,26 @@ class ManualIMAPDialog(tkinter.Toplevel):
         self.__user.trace("w", self.__update)
         self.__password.trace("w", self.__update)
 
-        host_field = tkinter.Entry(self, textvariable=self.__host)
-        user_field = tkinter.Entry(self, textvariable=self.__user)
-        pass_field = tkinter.Entry(self, show="*", textvariable=self.__password)
+        host_field = ttk.Entry(container, textvariable=self.__host)
+        user_field = ttk.Entry(container, textvariable=self.__user)
+        pass_field = ttk.Entry(container, show="*", textvariable=self.__password)
 
+        host_field.grid(row=0, column=1, sticky="nesw")
+        user_field.grid(row=1, column=1, sticky="nesw")
+        pass_field.grid(row=2, column=1, sticky="nesw")
 
-        host_field.grid(row=0, column=1)
-        user_field.grid(row=1, column=1)
-        pass_field.grid(row=2, column=1)
-
-        button_box = tkinter.Frame(self)
-
-        self.__ok_btn = tkinter.Button(button_box, text="OK", command=self.success, state=tkinter.DISABLED)
+        button_box = ttk.Frame(container)
+        self.__ok_btn = ttk.Button(button_box, text="OK", command=self.success, state=tkinter.DISABLED)
 
         host_field.bind("<Return>", self.__try_success)
         user_field.bind("<Return>", self.__try_success)
         pass_field.bind("<Return>", self.__try_success)
 
-        self.__ok_btn.pack(side=tkinter.RIGHT)
-        tkinter.Button(button_box, text="Cancel", command=self.failure).pack(side=tkinter.RIGHT)
+        self.__ok_btn.pack(side=tkinter.RIGHT, padx=(5, 0))
+        ttk.Button(button_box, text="Cancel", command=self.failure).pack(side=tkinter.RIGHT)
 
         button_box.grid(row=3, column=1, sticky="nesw")
+        container.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
         self.__ready = True
 

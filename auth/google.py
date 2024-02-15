@@ -1,5 +1,4 @@
-from google.oauth2.credentials import Credentials
-
+import datetime
 import json
 import time
 import webbrowser
@@ -7,6 +6,7 @@ import webbrowser
 import requests
 
 import config
+from credentials import Credentials
 
 
 class AuthorizationError(Exception):
@@ -47,5 +47,14 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
     
     if not auth_result:
         raise AuthorizationError("Authorization timed out.")
+
+    utc_expiry = datetime.datetime.fromtimestamp(auth_result["expiry_date"] // 1000, tz=datetime.timezone.utc)
+    utc_expiry = utc_expiry.replace(tzinfo=None)
     
-    return Credentials(auth_result["access_token"])
+    result = Credentials(
+        auth_result["access_token"],
+        refresh_token=auth_result["refresh_token"],
+        expiry=utc_expiry
+    )
+    
+    return result

@@ -1,4 +1,5 @@
 import tkinter
+import tkinter.ttk as ttk
 import typing
 
 
@@ -20,15 +21,15 @@ class Checklist(tkinter.Frame):
     
     def __setup_ui(self):
         self._scroll_window = tkinter.Text(self, state="disabled", cursor="arrow")
-        self._vscroll = tkinter.Scrollbar(self, orient=tkinter.VERTICAL)
+        self._vscroll = ttk.Scrollbar(self, orient=tkinter.VERTICAL)
 
         self._scroll_window.bind_all("<MouseWheel>", self.handle_mousewheel)
         self._scroll_window.config(yscrollcommand=self._vscroll.set)
 
         self._vscroll.config(command=self._scroll_window.yview)
 
+        self._vscroll.pack(side=tkinter.RIGHT, fill=tkinter.BOTH)
         self._scroll_window.pack(side=tkinter.LEFT, fill=tkinter.BOTH, expand=tkinter.YES)
-        self._vscroll.pack(side=tkinter.RIGHT, fill=tkinter.Y)
     
     def handle_mousewheel(self, event):
         self._scroll_window.yview_scroll(int(-event.delta / abs(event.delta)), "units")

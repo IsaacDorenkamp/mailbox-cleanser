@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+import requests
 
 from abc import ABCMeta, abstractclassmethod, abstractmethod
+import datetime
 import functools
 import imaplib
 import json
@@ -12,6 +12,9 @@ import re
 import socket
 import typing
 import warnings
+
+import config
+from credentials import Credentials
 
 
 class Registry(type):
@@ -187,9 +190,13 @@ class GmailIMAP(GenericIMAP):
         return json.loads(self.__credentials.to_json())
     
     @classmethod
+    def refresh_credentials(credentials: Credentials):
+        credentials.refresh()
+    
+    @classmethod
     def build(cls, json_data: typing.Any, debug: bool = False) -> GmailIMAP | None:
         try:
-            creds = Credentials.from_authorized_user_info(json_data)
+            creds = Credentials(json_data["token"], refresh_token=json_data["refresh_token"])
         except ValueError as error:
             warnings.warn("Could not construct credentials object: \"%s\"" % str(error))
             return None
@@ -197,7 +204,7 @@ class GmailIMAP(GenericIMAP):
         if creds:
             if not creds.valid:
                 if creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
+                    cls.refresh_credentials(creds)
                 else:
                     return None
             
