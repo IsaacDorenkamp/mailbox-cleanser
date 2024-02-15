@@ -1,1 +1,1 @@
-pyinstaller --noconfirm -w -n "Mailbox Cleanser" --add-data="resources/google_icon.png;resources" __main__.py
+pyinstaller --noconfirm -w -n "purgetool" --add-data="resources/google_icon.png;resources" __main__.py

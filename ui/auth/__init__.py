@@ -4,12 +4,12 @@ import tkinter
 import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
-import warnings
 
 from PIL import Image, ImageTk
 
 import auth.google
 from api import imap, service_factory
+import config
 import context
 from ui import concurrency
 
@@ -98,8 +98,8 @@ class AuthenticationOptions(tkinter.Toplevel):
             concurrency.main(tkinter.messagebox.showerror, "Error", str(err))
             return False
         except Warning:
-            concurrency.main(tkinter.messagebox.showerror, "Insufficient Permissions", "You have not granted sufficient permissions for Mailbox Cleanser to work."
-                             " Please ensure you grant permissions to view, modify, and delete mail in order to allow Mailbox Cleanser to work properly.")
+            concurrency.main(tkinter.messagebox.showerror, "Insufficient Permissions", f"You have not granted sufficient permissions for {config.APP_NAME} to work."
+                             f" Please ensure you grant permissions to view, modify, and delete mail in order to allow {config.APP_NAME} to work properly.")
             return False
 
         if google_creds:

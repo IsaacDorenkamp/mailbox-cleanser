@@ -1,1 +1,1 @@
-pyinstaller --noconfirm -w -n "Mailbox Cleanser" __main__.py
+pyinstaller --clean --noconfirm -w -n "purgetool" --icon "icons/purgetool icon.icns" __main__.py

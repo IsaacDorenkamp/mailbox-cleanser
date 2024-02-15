@@ -303,7 +303,7 @@ def main():
     settings = _patch_nones(settings)
 
     root = ttkthemes.ThemedTk(theme="scidgreen")
-    root.wm_title("Mailbox Cleanser")
+    root.wm_title("purgetool")
     root.geometry("400x450")
 
     style = ttk.Style(root)
