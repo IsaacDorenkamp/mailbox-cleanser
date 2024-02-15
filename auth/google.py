@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import time
 import webbrowser
 
@@ -27,6 +28,7 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
         try:
             response_data = auth_setup.json()
         except json.decoder.JSONDecodeError as err:
+            logging.error("Could not decode authorization setup response JSON. Message: " + str(err))
             response_data = {}
 
         raise AuthorizationError("Could not fetch authorization setup data. Reason: " + response_data.get("detail", "An unknown error occurred."))
@@ -56,5 +58,7 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
         refresh_token=auth_result.get("refresh_token", None),
         expiry=utc_expiry
     )
+
+    logging.info("Successfully authorized with Google, expires at %s" % utc_expiry.isoformat())
     
     return result

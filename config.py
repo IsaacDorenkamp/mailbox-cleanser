@@ -17,11 +17,13 @@ APP_AUTHOR = "Unorthodox Software"
 USER_CONFIG_DIR = appdirs.user_config_dir(APP_NAME, APP_AUTHOR)
 USER_DATA_DIR = appdirs.user_data_dir(APP_NAME, APP_AUTHOR)
 USER_CACHE_DIR = appdirs.user_cache_dir(APP_NAME, APP_AUTHOR)
+USER_LOG_DIR = appdirs.user_log_dir(APP_NAME, APP_AUTHOR)
 
 for app_dir in [
     USER_CONFIG_DIR,
     USER_DATA_DIR,
-    USER_CACHE_DIR
+    USER_CACHE_DIR,
+    USER_LOG_DIR
 ]:
     if not os.path.isdir(app_dir):
         os.makedirs(app_dir)

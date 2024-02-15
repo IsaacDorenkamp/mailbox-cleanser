@@ -18,6 +18,9 @@ from .selector import Selector
 from .settings import SettingsDialog
 
 
+logging.basicConfig(filename=os.path.join(config.USER_LOG_DIR, "run.log"), encoding='utf-8', level=logging.DEBUG)
+
+
 class MenuActions:
     class File:
         CACHE_CLEAR = "Clear Cached Data"

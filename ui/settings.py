@@ -59,7 +59,7 @@ class SettingsDialog(tkinter.Toplevel):
                 error = "Junk folder name must not begin or end with whitespace."
         
         if error:
-            tkinter.messagebox.showerror(error)
+            tkinter.messagebox.showerror("Error", error)
         else:
             self.__settings = {
                 "junk_folder": junk_folder or ""

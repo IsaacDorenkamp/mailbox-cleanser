@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from googleapiclient.discovery import build
-import requests
 
 from abc import ABCMeta, abstractclassmethod, abstractmethod
 import datetime
 import functools
 import imaplib
+import logging
 import json
 import re
 import socket
@@ -196,7 +196,19 @@ class GmailIMAP(GenericIMAP):
     @classmethod
     def build(cls, json_data: typing.Any, debug: bool = False) -> GmailIMAP | None:
         try:
-            creds = Credentials(json_data["token"], refresh_token=json_data.get("refresh_token"))
+            expiry_raw = json_data.get("expiry_date")
+            if expiry_raw and isinstance(expiry_raw, int):
+                utc_expiry = datetime.datetime.fromtimestamp(expiry_raw // 1000, tz=datetime.timezone.utc)
+                utc_expiry = utc_expiry.replace(tzinfo=None)
+            else:
+                utc_expiry = None
+
+            creds = Credentials(json_data["token"], refresh_token=json_data.get("refresh_token"), expiry=utc_expiry)
+
+            if utc_expiry:
+                logging.info("Credentials constructed, expires at %s" % utc_expiry.isoformat())
+            else:
+                logging.info("Credentials constructed, no expiration date.")
         except ValueError as error:
             warnings.warn("Could not construct credentials object: \"%s\"" % str(error))
             return None
@@ -204,6 +216,7 @@ class GmailIMAP(GenericIMAP):
         if creds:
             if not creds.valid:
                 if creds.expired and creds.refresh_token:
+                    logging.info("Credentials expired, refreshing.")
                     cls.refresh_credentials(creds)
                 else:
                     return None
