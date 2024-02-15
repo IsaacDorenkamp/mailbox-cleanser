@@ -95,7 +95,7 @@ class AuthenticationOptions(tkinter.Toplevel):
         try:
             google_creds = auth.google.run_authorization_flow()
         except auth.google.AuthorizationError as err:
-            concurrency.main(tkinter.messagebox.showerror, str(err))
+            concurrency.main(tkinter.messagebox.showerror, "Error", str(err))
             return False
         except Warning:
             concurrency.main(tkinter.messagebox.showerror, "Insufficient Permissions", "You have not granted sufficient permissions for Mailbox Cleanser to work."

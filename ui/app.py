@@ -1,6 +1,7 @@
 import configparser
 import functools
 import imaplib
+import logging
 import os
 import sys
 import tkinter
@@ -152,7 +153,7 @@ class MainApplication(ttk.Frame):
                 with open(os.path.join(config.USER_CONFIG_DIR, "settings.ini"), "w") as fp:
                     writer.write(fp)
             except IOError:
-                tkinter.messagebox.showerror("Could not save preferences.")
+                tkinter.messagebox.showerror("Error", "Could not save preferences.")
 
     def set_client(self, client: GenericIMAP):
         self.__client = client

@@ -26,7 +26,7 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
     if auth_setup.status_code >= 400:
         try:
             response_data = auth_setup.json()
-        except json.decoder.JSONDecodeError:
+        except json.decoder.JSONDecodeError as err:
             response_data = {}
 
         raise AuthorizationError("Could not fetch authorization setup data. Reason: " + response_data.get("detail", "An unknown error occurred."))

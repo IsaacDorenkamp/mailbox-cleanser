@@ -196,7 +196,7 @@ class GmailIMAP(GenericIMAP):
     @classmethod
     def build(cls, json_data: typing.Any, debug: bool = False) -> GmailIMAP | None:
         try:
-            creds = Credentials(json_data["token"], refresh_token=json_data["refresh_token"])
+            creds = Credentials(json_data["token"], refresh_token=json_data.get("refresh_token"))
         except ValueError as error:
             warnings.warn("Could not construct credentials object: \"%s\"" % str(error))
             return None
