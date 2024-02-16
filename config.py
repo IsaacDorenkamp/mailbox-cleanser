@@ -5,7 +5,7 @@ import sys
 DEBUG = "--debug" in sys.argv
 
 SCOPES = ["openid", "https://mail.google.com/", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/userinfo.email"]
-AUTH_SERVICE_URL = f"http://localhost:{os.environ.get('AUTH_SERVICE_PORT', '5000')}" if DEBUG else "http://auth.9tailedstudios.com"
+AUTH_SERVICE_URL = f"http://localhost:{os.environ.get('AUTH_SERVICE_PORT', '5000')}" if DEBUG else "https://auth.9tailedstudios.com"
 
 SETTINGS_DEFAULTS = {
     "junk_folder": "Junk"
