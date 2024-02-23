@@ -82,7 +82,6 @@ class AuthenticationOptions(tkinter.Toplevel):
             return
 
         if success:
-            service_factory.save_imap_service(self.__client)
             concurrency.main(self.destroy)
         else:
             concurrency.main(self.set_enabled, True)

@@ -187,7 +187,9 @@ class GmailIMAP(GenericIMAP):
     def serialize(self) -> typing.Any:
         # For some reason, credentials has a function to convert to JSON,
         # but not a simple Python dictionary. This is a workaround.
-        return json.loads(self.__credentials.to_json())
+        data = json.loads(self.__credentials.to_json())
+        data["user"] = self.user
+        return data
     
     @classmethod
     def refresh_credentials(credentials: Credentials):
@@ -226,7 +228,8 @@ class GmailIMAP(GenericIMAP):
             
             try:
                 user = cls.get_user_email(creds)
-            except:
+            except Exception as exc:
+                logging.exception(str(exc))
                 return None
 
             return cls(

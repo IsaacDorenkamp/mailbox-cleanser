@@ -8,6 +8,7 @@ import tkinter
 import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
+import uuid
 
 from api import CleanserService, GenericIMAP, service_factory
 from . import concurrency
@@ -19,6 +20,7 @@ from .settings import SettingsDialog
 
 
 logging.basicConfig(filename=os.path.join(config.USER_LOG_DIR, "run.log"), encoding='utf-8', level=logging.DEBUG)
+logging.getLogger().addHandler(logging.StreamHandler())
 
 
 class MenuActions:
@@ -55,6 +57,10 @@ class MainApplication(ttk.Frame):
 
     def __init__(self, parent, settings: dict[str, str | None], debug: bool = False):
         super().__init__(parent)
+        self.service_config = {
+            "accounts": [],
+            "active":  None
+        }
         self.__settings = settings
         self.__running = tkinter.BooleanVar(value=True)
         self.__menus = {}
@@ -107,6 +113,32 @@ class MainApplication(ttk.Frame):
 
         client = auth_options.get_client()
         if client:
+            existing_index = next(
+                map(
+                    lambda entry: entry[0],
+                    filter(
+                        lambda index_and_account: (index_and_account[1]["user"] == client.user, index_and_account[1]["class"] == client.__class__.__name__),
+                        enumerate(self.service_config["accounts"])
+                    )
+                ),
+                None
+            )
+            account_id = str(uuid.uuid4())
+            client_config = client.serialize()
+            factory_config = {
+                "id": account_id,
+                "class": client.__class__.__name__,
+                "data": client_config
+            }
+            self.service_config["active"] = account_id
+            self.service_config["version"] = service_factory.CONFIG_VERSION
+            if existing_index is not None:
+                self.service_config["accounts"][existing_index] = factory_config
+            else:
+                self.service_config["accounts"].append(factory_config)
+
+            service_factory.save_service_config(self.service_config)
+
             self.set_client(client)
             self.selector.set_enabled(True)
             initialize_task = concurrency.DeferredTask(self.initialize)
@@ -198,22 +230,36 @@ class MainApplication(ttk.Frame):
         self.set_status("Connecting...")
         
         try:
-            imap_service = service_factory.create_service(debug=self.__debug)
+            build_result = service_factory.create_service(debug=self.__debug)
         except GenericIMAP.OperationError as err:
             self.set_status("Failed to connect to IMAP server.")
             concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
             concurrency.main(tkinter.messagebox.showerror, "Setup Error", str(err))
             return
         
-        if not imap_service:
+        if not build_result:
             self.set_status("Not logged in.")
             concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
             concurrency.main(self.sign_in)
             return
+
+        service_config, imap_service = build_result
+        account_index = next(
+            map(lambda entry: entry[0],
+                filter(
+                    lambda index_and_account: index_and_account[1]["id"] == service_config["active"], enumerate(service_config["accounts"])
+                )
+            ), None
+        )
+
+        if account_index is not None:
+            service_config["accounts"][account_index]["data"] = imap_service.serialize()
+
+        self.service_config = service_config
         
         # ensure persisted data is updated, such as in the case that
         # Google credentials were refreshed during the construction
-        service_factory.save_imap_service(imap_service)
+        service_factory.save_service_config(service_config)
         self.set_client(imap_service)
         
         self.initialize()

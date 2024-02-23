@@ -13,14 +13,13 @@ class Credentials(BaseCredentials):
     auth-flow-provider exists to keep the client secret hidden.
     """
 
-    def refresh(self, _):
+    def refresh(self, request):
         if self._refresh_token:
             auth_response = requests.post(f"{config.AUTH_SERVICE_URL}/flows/google/refresh", json={
                 "refresh_token": self._refresh_token
             })
 
             data = auth_response.json()
-
             self.token = data["access_token"]
 
             expiry = datetime.datetime.fromtimestamp(data["expiry_date"] // 1000, datetime.timezone.utc)
@@ -28,4 +27,4 @@ class Credentials(BaseCredentials):
 
             self.expiry = expiry
         else:
-            super().refresh()
+            super().refresh(request)
