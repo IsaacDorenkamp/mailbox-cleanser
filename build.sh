@@ -1,1 +1,1 @@
-pyinstaller --clean --noconfirm -w -n "purgetool" --icon "icons/purgetool icon.icns" __main__.py
+pyinstaller --clean --noconfirm -w -n "purgetool" --add-data="resources/google_icon.png:resources" --icon "icons/purgetool icon.icns" __main__.py
