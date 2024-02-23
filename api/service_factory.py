@@ -36,6 +36,7 @@ def create_service_versioned(data: dict[str, typing.Any], debug: bool = False):
     try:
         imap_class_name = data.get("class")
         if not imap_class_name:
+            warnings.warn("No IMAP class specified. Account data: %s" % str(data))
             return None
 
         imap_class = service.GenericIMAP[imap_class_name]
@@ -69,31 +70,15 @@ def create_service_versioned(data: dict[str, typing.Any], debug: bool = False):
         raise ValueError("Could not find active account with id '%s'" % active)
 
 
-def create_service(debug: bool = False) -> tuple[dict[str, typing.Any], service.GenericIMAP] | None:
-    try:
-        with open(SERVICE_CONFIG_FILE, "r") as fp:
-            config_data = json.load(fp)
-    except FileNotFoundError:
-        warnings.warn("Service configuration file does not exist.")
-        return None
-    except json.decoder.JSONDecodeError:
-        warnings.warn("Service configuration file exists, but is not valid JSON.")
-        return None
-    
-    if not isinstance(config_data, dict):
+def create_service(service_config: dict[str, typing.Any], debug: bool = False) -> service.GenericIMAP | None:
+    if not isinstance(service_config, dict):
         warnings.warn("Service configuration file exists and contains valid JSON, but is not a map.")
         return None
     
-    version = config_data.pop("version", "1")
+    version = service_config.pop("version", "1")
 
     try:
-        service = create_service_versioned(config_data, version=version, debug=debug)
-        if service is None:
-            return None
-
-        formatted = format_service_config(config_data, version=version)
-        formatted["version"] = CONFIG_VERSION
-        return formatted, service
+        return create_service_versioned(service_config, version=version, debug=debug)
     except Exception as exc:
         logging.exception(str(exc))
         return None

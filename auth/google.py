@@ -46,6 +46,8 @@ def run_authorization_flow(timeout: int = 75) -> Credentials:
             break
 
         time.sleep(1.0)
+
+    print("auth result:", auth_result)
     
     if not auth_result:
         raise AuthorizationError("Authorization timed out.")

@@ -2,6 +2,7 @@ import configparser
 import functools
 import imaplib
 import logging
+import json
 import os
 import sys
 import tkinter
@@ -9,6 +10,7 @@ import tkinter.ttk as ttk
 import tkinter.messagebox
 import typing
 import uuid
+import warnings
 
 from api import CleanserService, GenericIMAP, service_factory
 from . import concurrency
@@ -26,17 +28,21 @@ logging.getLogger().addHandler(logging.StreamHandler())
 class MenuActions:
     class File:
         CACHE_CLEAR = "Clear Cached Data"
-        SIGN_IN = "Log into account..."
-        SIGN_OUT = "Log Out"
         PREFERENCES = "Preferences"
         EXIT = "Exit"
+    
+    class User:
+        ADD_ACCOUNT = "Log In to Account..."
+        SWITCH_ACCOUNT = "Switch Account..."
+        SIGN_OUT = "Log Out"
 
 
     NONTRIVIAL_ACTIONS = [
         ("file", File.CACHE_CLEAR),
-        ("file", File.SIGN_IN),
-        ("file", File.SIGN_OUT),
-        ("file", File.PREFERENCES)
+        ("file", File.PREFERENCES),
+        ("user", User.ADD_ACCOUNT),
+        ("user", User.SWITCH_ACCOUNT),
+        ("user", User.SIGN_OUT),
     ]
 
 
@@ -55,12 +61,17 @@ class MainApplication(ttk.Frame):
     __debug: bool
     __running: tkinter.BooleanVar
 
-    def __init__(self, parent, settings: dict[str, str | None], debug: bool = False):
+    def __init__(self, parent, settings: dict[str, str | None], service_config: dict[str, typing.Any] | None = None, debug: bool = False):
         super().__init__(parent)
-        self.service_config = {
-            "accounts": [],
-            "active":  None
-        }
+
+        self.service_config = (
+            service_factory.format_service_config(service_config, version=service_config.get("version", "1"))
+            if service_config else {
+                "accounts": [],
+                "active": None
+            }
+        )
+        self.service_config["version"] = service_config.get("version", "1")
         self.__settings = settings
         self.__running = tkinter.BooleanVar(value=True)
         self.__menus = {}
@@ -82,28 +93,34 @@ class MainApplication(ttk.Frame):
         self.__item_states = {}
         self.__menubar = menu_bar = tkinter.Menu(self.master)
         file_menu = tkinter.Menu(menu_bar, tearoff=0)
+        user_menu = tkinter.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label=MenuActions.File.CACHE_CLEAR, command=functools.partial(
             self.confirm,
             "Confirm Cache Clear",
             "This will clear all cache data. This does not include authorization information, but does include the cached lists of senders. Proceed?",
             self.cache_clear
         ))
-        file_menu.add_command(label=MenuActions.File.SIGN_IN, command=self.sign_in, state=tkinter.DISABLED)
-        file_menu.add_command(label=MenuActions.File.SIGN_OUT, command=self.sign_out, state=tkinter.DISABLED)
-        file_menu.add_separator()
         file_menu.add_command(label=MenuActions.File.PREFERENCES, command=self.show_preferences)
         file_menu.add_separator()
         file_menu.add_command(label=MenuActions.File.EXIT, command=self.try_quit)
 
+        user_menu.add_command(label=MenuActions.User.ADD_ACCOUNT, command=self.sign_in, state=tkinter.DISABLED)
+        user_menu.add_command(label=MenuActions.User.SWITCH_ACCOUNT, command=lambda: None, state=tkinter.DISABLED)
+        user_menu.add_separator()
+        user_menu.add_command(label=MenuActions.User.SIGN_OUT, command=self.sign_out, state=tkinter.DISABLED)
+
         self.__menus["file"] = file_menu
+        self.__menus["user"] = user_menu
 
         menu_bar.add_cascade(label="File", menu=file_menu)
+        menu_bar.add_cascade(label="User", menu=user_menu)
         self.master.config(menu=menu_bar)
 
     def sign_in(self):
         auth_options = AuthenticationOptions(lambda window: concurrency.wait_window(window, self.master, self.running), self.master)
 
         self.__menubar.entryconfig("File", state=tkinter.DISABLED)
+        self.__menubar.entryconfig("User", state=tkinter.DISABLED)
 
         auth_options.transient(self)
         auth_options.wait_visibility()
@@ -117,7 +134,7 @@ class MainApplication(ttk.Frame):
                 map(
                     lambda entry: entry[0],
                     filter(
-                        lambda index_and_account: (index_and_account[1]["user"] == client.user, index_and_account[1]["class"] == client.__class__.__name__),
+                        lambda index_and_account: (index_and_account[1]["data"]["user"] == client.user, index_and_account[1]["class"] == client.__class__.__name__),
                         enumerate(self.service_config["accounts"])
                     )
                 ),
@@ -143,7 +160,11 @@ class MainApplication(ttk.Frame):
             self.selector.set_enabled(True)
             initialize_task = concurrency.DeferredTask(self.initialize)
             initialize_task.then(functools.partial(concurrency.main, self.__menubar.entryconfig, "File", state=tkinter.NORMAL))
+            initialize_task.then(functools.partial(concurrency.main, self.__menubar.entryconfig, "User", state=tkinter.NORMAL))
             initialize_task.run()
+        else:
+            self.__menubar.entryconfig("File", state=tkinter.NORMAL)
+            self.__menubar.entryconfig("User", state=tkinter.NORMAL)
 
     def sign_out(self):
         try:
@@ -162,8 +183,8 @@ class MainApplication(ttk.Frame):
         self.__service = None
         self.selector.service = None
 
-        self.__menus["file"].entryconfig(MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
-        self.__menus["file"].entryconfig(MenuActions.File.SIGN_OUT, state=tkinter.DISABLED)
+        self.__menus["user"].entryconfig(MenuActions.User.ADD_ACCOUNT, state=tkinter.NORMAL)
+        self.__menus["user"].entryconfig(MenuActions.User.SIGN_OUT, state=tkinter.DISABLED)
         self.selector.clear_senders()
         self.selector.set_enabled(False)
     
@@ -230,40 +251,37 @@ class MainApplication(ttk.Frame):
         self.set_status("Connecting...")
         
         try:
-            build_result = service_factory.create_service(debug=self.__debug)
+            imap_service = service_factory.create_service(self.service_config, debug=self.__debug)
         except GenericIMAP.OperationError as err:
             self.set_status("Failed to connect to IMAP server.")
-            concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+            concurrency.main(self.__menus["user"].entryconfigure, MenuActions.User.ADD_ACCOUNT, state=tkinter.NORMAL)
             concurrency.main(tkinter.messagebox.showerror, "Setup Error", str(err))
             return
         
-        if not build_result:
+        if not imap_service:
             self.set_status("Not logged in.")
-            concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.NORMAL)
+            concurrency.main(self.__menus["user"].entryconfigure, MenuActions.User.ADD_ACCOUNT, state=tkinter.NORMAL)
             concurrency.main(self.sign_in)
             return
 
-        service_config, imap_service = build_result
         account_index = next(
             map(lambda entry: entry[0],
                 filter(
-                    lambda index_and_account: index_and_account[1]["id"] == service_config["active"], enumerate(service_config["accounts"])
+                    lambda index_and_account: index_and_account[1]["id"] == self.service_config["active"], enumerate(self.service_config["accounts"])
                 )
             ), None
         )
 
         if account_index is not None:
-            service_config["accounts"][account_index]["data"] = imap_service.serialize()
-
-        self.service_config = service_config
+            self.service_config["accounts"][account_index]["data"] = imap_service.serialize()
         
         # ensure persisted data is updated, such as in the case that
         # Google credentials were refreshed during the construction
-        service_factory.save_service_config(service_config)
+        service_factory.save_service_config(self.service_config)
         self.set_client(imap_service)
         
         self.initialize()
-        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_OUT, state=tkinter.NORMAL)
+        concurrency.main(self.__menus["user"].entryconfigure, MenuActions.User.SIGN_OUT, state=tkinter.NORMAL)
 
     def initialize(self):
         self.set_status("Authenticating...")
@@ -271,9 +289,9 @@ class MainApplication(ttk.Frame):
         self.set_status("Fetching unique senders...")
         self.load_and_populate_unique_senders()
         self.set_status("Done.")
-
-        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_IN, state=tkinter.DISABLED)
-        concurrency.main(self.__menus["file"].entryconfigure, MenuActions.File.SIGN_OUT, state=tkinter.NORMAL)
+        
+        concurrency.main(self.__menus["user"].entryconfigure, MenuActions.User.ADD_ACCOUNT, state=tkinter.DISABLED)
+        concurrency.main(self.__menus["user"].entryconfigure, MenuActions.User.SIGN_OUT, state=tkinter.NORMAL)
     
     def load_and_populate_unique_senders(self):
         senders = self.load_unique_senders()
@@ -348,6 +366,16 @@ def main():
     
     settings = _patch_nones(settings)
 
+    try:
+        with open(service_factory.SERVICE_CONFIG_FILE, "r") as fp:
+            service_config = json.load(fp)
+    except FileNotFoundError:
+        warnings.warn("Service configuration file does not exist.")
+        service_config = None
+    except json.decoder.JSONDecodeError:
+        warnings.warn("Service configuration file exists, but is not valid JSON.")
+        service_config = None
+
     root = ttkthemes.ThemedTk(theme="scidgreen")
     root.wm_title("purgetool")
     root.geometry("400x450")
@@ -359,7 +387,7 @@ def main():
 
     debug_mode = "--debug" in sys.argv
 
-    app = MainApplication(root, settings, debug=debug_mode)
+    app = MainApplication(root, settings, service_config=service_config, debug=debug_mode)
     
     app.pack(fill=tkinter.BOTH, expand=tkinter.YES)
     
